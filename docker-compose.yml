@@ -42,7 +42,7 @@ services:
     container_name: go_app
     restart: on-failure
     env_file:
-      - ./golang/.env
+      - .env
     environment:
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_INTERNAL_PORT}
@@ -51,7 +51,6 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
     volumes:
       - ./golang:/app
-
     depends_on:
       db:
         condition: service_healthy
