@@ -9,7 +9,7 @@ import (
 	"github.com/verdex4/wall-street-code/auth"
 )
 
-func main() {
+func testJWT() {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -21,4 +21,8 @@ func main() {
 		}
 	}()
 	wg.Wait()
+}
+
+func main() {
+	fmt.Println("Hello, World!")
 }

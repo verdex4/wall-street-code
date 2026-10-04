@@ -1,8 +1,15 @@
 import yfinance as yf
-import matplotlib.pyplot as plt
 
-dat = yf.Ticker("NVDA")
-hist = dat.history(period="1d", interval="1m")
+def test():
+    dat = yf.Ticker("AAPL")
+    hist = dat.history(period="1d", interval="1m")
 
-hist["Close"].plot()
-plt.show()
+    print(hist)
+    #hist["Close"].plot()
+    #plt.show()
+
+def main():
+    print("Hello, World!")
+    
+if __name__ == "__main__":
+    main()

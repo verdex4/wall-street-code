@@ -1,4 +1,4 @@
-module "github.com/verdex4/wall-street-code"
+module github.com/verdex4/wall-street-code
 
 go 1.27.1
 
