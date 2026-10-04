@@ -1,2 +1,7 @@
 yfinance
 matplotlib
+pandas
+sqlalchemy[asyncio]
+asyncpg
+requests
+dotenv
