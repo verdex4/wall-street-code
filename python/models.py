@@ -6,24 +6,26 @@ class Base(DeclarativeBase):
     pass
 
 class Candle(Base):
-    """Таблица, хранящая свечи в формате OHLCV с интервалом в 1 минуту.
-    
-    Колонки:
-    - ticker: Тикер акции
-    - opened_at: Время открытия свечи в UTC
-    - open: Открытие свечи в центах
-    - high: Максимум свечи в центах
-    - low: Минимум свечи в центах
-    - close: Закрытие свечи в центах
-    - volume: Объем торгов в штуках
-    - dividends: Дивиденды на одну акцию в центах
-    - splits: Количество новых акций за одну старую
+    """Table, storing candles in OHLCV format with an interval of 1 minute.
+
+    Columns:
+    - opened_at: The time the candle opened in UTC
+    - ticker: The ticker name of the stock
+    - open: The opening price of the candle
+    - high: The highest price of the candle
+    - low: The lowest price of the candle
+    - close: The closing price of the candle
+    - volume: The volume of the candle in shares
+    - dividends: The dividends paid
+    - splits: The number of new shares issued on the candle
+
+    Note, that price and dividends are multiplied by 1000, so it's representing value in one-hundredths of cent (0.0001$).
+
     """
     __tablename__ = "candles"    
 
-
-    ticker: Mapped[str] = mapped_column(String(10), nullable=False)
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ticker: Mapped[str] = mapped_column(String(10), nullable=False)
     
     open: Mapped[int] = mapped_column(BigInteger, nullable=False)
     high: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -31,10 +33,10 @@ class Candle(Base):
     close: Mapped[int] = mapped_column(BigInteger, nullable=False)
     volume: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    dividends: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    splits: Mapped[float] = mapped_column(Float, nullable=False)
+    dividends: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    splits: Mapped[float] = mapped_column(Float, nullable=True)
 
     __table_args__ = (
-        PrimaryKeyConstraint("ticker", "opened_at", name="pk_candles"),
-        Index("idx_ticker_opened_at", "ticker", "opened_at"),
+        PrimaryKeyConstraint("opened_at", "ticker", name="pk_candles"),
+        Index("idx_opened_at_ticker", "opened_at", "ticker"),
     )
