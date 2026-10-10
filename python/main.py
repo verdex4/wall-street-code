@@ -1,13 +1,13 @@
 import yfinance as yf
 from database import init_db, print_select_all, execute_transaction, query_to_scalar, query_to_df
-from seed import fill_db
+from seed import fetch_history, download_realtime
 from sqlalchemy import text
 import logging
 import asyncio
 import matplotlib.pyplot as plt
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO, format='%(filename)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(filename)s -> %(funcName)s() - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # top 60 tickers by liquidity on Nasdaq and NYSE at 2026-10-08
@@ -32,10 +32,12 @@ async def main():
     logger.info("Python app is starting")
     
     await init_db()
-    await fill_db(tickers)
+    await fetch_history(tickers)
+    await download_realtime(tickers)
+
     df = await query_to_df("SELECT * FROM candles WHERE ticker = 'NVDA' ORDER BY opened_at;")
     plt.plot(df["close"] / 10000)
-    plt.xlabel("Time")
+    plt.xlabel("Candles")
     plt.ylabel("Price")
     plt.title("NVDA")
     plt.savefig('/app/plots/nvda_price_chart_26_09_09-26_10_09.png')

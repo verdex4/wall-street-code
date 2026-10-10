@@ -8,11 +8,63 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-async def fill_db(tickers: list[str]):
+async def download_realtime(tickers: list[str]):
+    """Fetches last 1 min candles from REST for selected tickers, saving them to database and working while session is open.
+
+    For now, websocket is omitted due to many tickers and hard implementation.
+    """
+    cur_time = datetime.now(tz=ZoneInfo("America/New_York"))
+    logger.info(f"Starting downloading realtime data. Current time: {cur_time}")
+    if cur_time.weekday() == 5 or cur_time.weekday() == 6:
+        open_datetime = cur_time.replace(hour=9, minute=30, second=0, microsecond=0)
+        while open_datetime.weekday != 0:
+            open_datetime += timedelta(days=1)
+        delta = open_datetime - cur_time
+        sleep_time = delta.total_seconds()
+        logger.info(f"It's weekend, markets are closed, sleeping for {delta} until {open_datetime}")
+        await asyncio.sleep(sleep_time)
+    if cur_time < datetime(cur_time.year, cur_time.month, cur_time.day, 9, 30, 0):
+        open_datetime = cur_time.replace(hour=9, minute=30, second=0, microsecond=0)
+        delta = open_datetime - cur_time
+        sleep_time = delta.total_seconds()
+        logger.info(f"It's {cur_time}, markets are not opened, waiting {delta} until open at {open_datetime}")
+        await asyncio.sleep(sleep_time)
+    if cur_time >= datetime(cur_time.year, cur_time.month, cur_time.day, 16, 0, 0):
+        open_datetime = cur_time.replace(day=cur_time.day + 1, hour=9, minute=30, second=0, microsecond=0)
+        while open_datetime.weekday == 5 or open_datetime.weekday == 6:
+            open_datetime += timedelta(days=1)
+        delta = open_datetime - cur_time
+        sleep_time = delta.total_seconds()
+        logger.info(f"Markets are closed, waiting {delta} until open at {open_datetime}")
+        await asyncio.sleep(sleep_time)
+    if cur_time.replace(second=0, microsecond=0, tzinfo=None) == datetime(cur_time.year, cur_time.month, cur_time.day, 9, 30, 0):
+        logger.info("Session is opened, but need to wait for first candle. Waiting...")
+        await asyncio.sleep(60 - cur_time.second)
+
+    cur_time = datetime.now(tz=ZoneInfo("America/New_York"))
+    while cur_time < datetime(cur_time.year, cur_time.month, cur_time.day, 16, 0, 0):
+        logger.debug(f"Downloading realtime data. Current time: {cur_time}")
+        await fetch_history(tickers, fast_download=True)
+        cur_time = datetime.now(tz=ZoneInfo("America/New_York"))
+
+    logger.info("Session closed. Realtime downloading is finished")
+    open_datetime = cur_time.replace(day=cur_time.day + 1, hour=9, minute=30, second=0, microsecond=0)
+    while open_datetime.weekday == 5 or open_datetime.weekday == 6:
+        open_datetime += timedelta(days=1)
+    delta = open_datetime - cur_time
+    sleep_time = delta.total_seconds()
+    logger.info(f"Waiting {delta} until open at {open_datetime}")
+    await asyncio.sleep(sleep_time)
+    await download_realtime(tickers)
+
+async def fetch_history(tickers: list[str], fast_download: bool = False):
     """Fetches history data (1 min candles) by 1 day for selected tickers that not in database yet.
     
     NOTE: if database is empty, FILLING 10 TICKERS WILL TAKE AROUND 30 MINUTES. It will save from API rate limits.
-    There is no official rate limits, but algorithm making around 650 requests per hour.
+    There is no official rate limits, but algorithm making around 700 requests per hour if loading history.
+
+    If downloading data for last minutes, prefer using fast_download=True to make requests faster (small requests will not cause rate limits as fast as history loading).
+    With fast_download=True number of requests per hour will be around 1400.
     """
     logger.info("Starting filling database")
 
@@ -31,7 +83,7 @@ async def fill_db(tickers: list[str]):
         # intraday data available for 30 days
         # finding last available day or continue to load existing data
         # session opening at 9:30, closing at 16:00
-        if cur_time.hour <= 9 and cur_time.minute < 30:
+        if cur_time.replace(tzinfo=None) < datetime(cur_time.year, cur_time.month, cur_time.day, 9, 30, 0):
             available = cur_time - timedelta(days=30)
             if last_candle is not None and last_candle >= available:
                 if last_candle.hour == 15 and last_candle.minute == 59:
@@ -42,7 +94,7 @@ async def fill_db(tickers: list[str]):
                 start = datetime(available.year, available.month, available.day, 9, 30, 0)
             # end is exclusive from yf.Ticker.history() method
             end = datetime(cur_time.year, cur_time.month, cur_time.day - 1, 16, 0, 0)
-        elif datetime(cur_time.year, cur_time.month, cur_time.day, 9, 30, 0) <= cur_time.replace(tzinfo=None) < datetime(cur_time.year, cur_time.month, cur_time.day, 16, 0, 0):
+        elif datetime(cur_time.year, cur_time.month, cur_time.day, 9, 30, 0) < cur_time.replace(tzinfo=None) < datetime(cur_time.year, cur_time.month, cur_time.day, 16, 0, 0):
             available = cur_time - timedelta(days=30)
             if last_candle is not None and last_candle >= available:
                 if last_candle.hour == 15 and last_candle.minute == 59:
@@ -69,7 +121,9 @@ async def fill_db(tickers: list[str]):
 
         t = yf.Ticker(ticker)
         last_time = start
-        logger.info(f"Starting download ticker {ticker}. Start: {start}, end: {end}")
+        delta = end - start
+
+        logger.info(f"Starting download history data for ticker {ticker}. Start: {start}, end: {end}")
         while start < end:
             try:
                 # if it is weekend -> skip
@@ -77,13 +131,21 @@ async def fill_db(tickers: list[str]):
                     logger.debug(f"Skipping weekend day {start}")
                     start += timedelta(days=1)
                     continue
-                df = t.history(period="1d", interval="1m", start=start)
+                if delta <= timedelta(days=1):
+                    # requesting minutes we need, not all day
+                    df = t.history(interval="1m", start=start, end=end)
+                else:
+                    df = t.history(period="1d", interval="1m", start=start)
                 if df.empty:
                     # it can be holiday so continue
                     logger.debug(f"No data loaded for ticker {ticker} with start {start}. Continuing to next day")
                     start += timedelta(days=1)
-                    logger.debug(f"Sleeping for 5 seconds")
-                    await asyncio.sleep(5)
+                    if fast_download:
+                        logger.debug("Using fast download, skipping 2.5 seconds")
+                        await asyncio.sleep(2.5)
+                    else:
+                        logger.debug(f"Slow mode enabed, sleeping for 5 seconds")
+                        await asyncio.sleep(5)
                     continue
                 last_time = df.index[-1].tz_localize(None)
                 logger.debug(f"Downloaded {df.shape[0]} candles for ticker {ticker} from {start} until {last_time}")
@@ -115,8 +177,12 @@ async def fill_db(tickers: list[str]):
                 logger.debug("Data saved to database")
 
                 start += timedelta(days=1)
-                logger.debug(f"Sleeping for 5 seconds")
-                await asyncio.sleep(5)
+                if fast_download:
+                    logger.debug("Using fast download, skipping 2.5 seconds")
+                    await asyncio.sleep(2.5)
+                else:
+                    logger.debug(f"Slow mode enabed, sleeping for 5 seconds")
+                    await asyncio.sleep(5)
             except Exception as e:
                 if "Too Many Requests" in str(e):
                     logger.critical(f"CRITICAL ERROR: API RATE LIMITED. Text: {e}. Please try again later after few hours.")

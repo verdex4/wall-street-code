@@ -41,10 +41,10 @@ async def query_to_scalar(q, params=None):
         result = await conn.execute(text(q), params or {})
         return result.scalar()
 
-# def insert_on_conflict_nothing(table, conn, keys, data_iter):
-#     data = [dict(zip(keys, row)) for row in data_iter]
-#     stmt = insert(table.table).values(data).on_conflict_do_nothing()
-#     conn.execute(stmt)
+def insert_on_conflict_nothing(table, conn, keys, data_iter):
+    data = [dict(zip(keys, row)) for row in data_iter]
+    stmt = insert(table.table).values(data).on_conflict_do_nothing()
+    conn.execute(stmt)
 
 async def df_to_db(df: pd.DataFrame, table_name="candles"):
     """Inserts a DataFrame into a database table. No conflicts if data already exists."""
@@ -55,7 +55,7 @@ async def df_to_db(df: pd.DataFrame, table_name="candles"):
             con=sync_conn,
             if_exists="append",
             index=False,
-            method="multi",
+            method=insert_on_conflict_nothing,
             chunksize=5000,
             )
         )
