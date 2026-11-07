@@ -3,60 +3,65 @@ package auth
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"sync"
+	"net/http"
+	"os"
 	"time"
 
-	"github.com/verdex4/wall-street-code/utils"
+	_ "github.com/joho/godotenv/autoload"
 )
 
-var jwt string = ""
-
-func init() {
-	go refreshJWT()
+type JWTReceiver struct {
+	jwt       string
+	client    *http.Client
+	sleepTime time.Duration
 }
 
-func GetJWT() string {
-	for jwt == "" {
-		// ждем, пока горутина из init() не заполнит jwt
-		time.Sleep(50 * time.Millisecond)
+// inializes JWTReceiver with valid JWT
+func NewJWTReceiver(client *http.Client) (*JWTReceiver, error) {
+	r := &JWTReceiver{
+		jwt:    "",
+		client: client,
 	}
-	return jwt
+	t, err := r.newJWT()
+	if err != nil {
+		return r, err
+	}
+	r.jwt = t
+	return r, nil
 }
 
-// Обновляет JWT каждые 14,5 минут (действие одного - 15 минут согласно API)
-func refreshJWT() {
-	wg := sync.WaitGroup{}
-	wg.Go(
-		func() {
-		defer wg.Done()
-		for {
-			jwt = newJWT()
-			time.Sleep(14 * time.Minute + 30 * time.Second)
-		}
-	},
-	)
-	wg.Wait()
+func (r *JWTReceiver) GetJWT() string {
+	return r.jwt
 }
 
-func newJWT() string {
-	body := fmt.Appendf(nil, `{"secret": "%s"}`, utils.GetEnv("API_TOKEN"))
+func (r *JWTReceiver) newJWT() (string, error) {
+	apiToken := os.Getenv("API_TOKEN")
+	if apiToken == "" {
+		return "", errors.New("Env key `API_TOKEN` not found")
+	}
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		return "", errors.New("Env key `BASE_URL` not found")
+	}
 
-	resp, err := utils.HttpClient.Post(
-		fmt.Sprintf("%s/v1/sessions", utils.GetEnv("BASE_URL")),
+	body := fmt.Appendf(nil, `{"secret": "%s"}`, apiToken)
+	resp, err := r.client.Post(
+		fmt.Sprintf("%s/v1/sessions", baseURL),
 		"application/json",
 		bytes.NewBuffer(body),
 	)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
 	defer resp.Body.Close()
 
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
 	var respStruct struct {
@@ -65,10 +70,20 @@ func newJWT() string {
 
 	err = json.Unmarshal(body, &respStruct)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
-	return respStruct.Token
+	return respStruct.Token, nil
 }
 
-
+// Infinite function to updating JWT, must be ran using new goroutine
+func (r *JWTReceiver) RefreshJWT(sleepTime time.Duration) error {
+	for {
+		t, err := r.newJWT()
+		if err != nil {
+			return err
+		}
+		r.jwt = t
+		time.Sleep(sleepTime)
+	}
+}
