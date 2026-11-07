@@ -20,10 +20,10 @@ func TestReceiver(t *testing.T) {
 		t.Errorf("jwt should be valid, got empty string")
 	}
 
-	sleepTime := 10 * time.Second
+	sleepTime := 3 * time.Second
 	go r.RefreshJWT(sleepTime)
 
-	time.Sleep(3 * time.Second) // waiting for goroutine take JWT
+	time.Sleep(1 * time.Second) // waiting for goroutine take JWT
 
 	newJWT := r.GetJWT()
 
@@ -34,7 +34,7 @@ func TestReceiver(t *testing.T) {
 		t.Errorf("jwt should be updated after sleeping, got same JWT: %s", newJWT)
 	}
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	newJWT2 := r.GetJWT()
 

@@ -2,14 +2,14 @@ package account
 
 import "github.com/verdex4/wall-street-code/config"
 
-type PositionSide string
+type PositionSide = config.PositionSide
 
 const (
 	SCALE                        = config.SCALE
 	FEE_SCALE                    = config.FEE_SCALE
 	VIRTUAL_BALANCE              = config.VIRTUAL_BALANCE
-	LongSide        PositionSide = "long"
-	ShortSide       PositionSide = "short"
+	LongSide        PositionSide = config.LongSide
+	ShortSide       PositionSide = config.ShortSide
 )
 
 var PositionNotOpenedErr = config.PositionNotOpenedErr
